@@ -6,6 +6,8 @@ A python based freedompop account query
 print the summary information for each account
 
 ## Usage
+copy freedompop.cfg.example as freedompop.cfg, modify it to included your accounts and password
+
 ```
 $ python3 fpopquery.py
 mail@domain.com(1xxxxxxxxxx): 0/200 minutes 0/500 text messages 50.58MB/642.0MB mobile data, plan plan-zmp-free renew in 17 days 23 hours (2018-04-18 17:00:00)
