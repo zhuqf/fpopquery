@@ -86,7 +86,7 @@ class FreedomPop:
     def getPlan(device):
         return device["plan"]
 
-    def _getPlanInfo(phoneUsage, planName, type = None):
+    def getPlanInfo(phoneUsage, planName, type = None):
         info = None
         for plan in phoneUsage["phoneActivityPlans"]:
             if plan["voicePlanType"] == planName:
@@ -97,30 +97,30 @@ class FreedomPop:
                 break
         return info
 
-    def getTotalTexts(phoneUsage):
+    def getTotalTexts(phoneUsage, planName = 'MAIN'):
         total = 0
-        info = FreedomPop._getPlanInfo( phoneUsage, "MAIN", "text" )
+        info = FreedomPop.getPlanInfo( phoneUsage, planName, "text" )
         if info is not None:
             total = info["totalAllocated"] 
         return total
         
-    def getUsedTexts(phoneUsage):
+    def getUsedTexts(phoneUsage, planName = 'MAIN'):
         used = 0
-        info = FreedomPop._getPlanInfo( phoneUsage, "MAIN", "text" )
+        info = FreedomPop.getPlanInfo( phoneUsage, planName, "text" )
         if info is not None:
             used = info["totalUsed"]
         return used
         
-    def getTotalMinutes(phoneUsage):
+    def getTotalMinutes(phoneUsage, planName = 'MAIN'):
         total = 0
-        info = FreedomPop._getPlanInfo( phoneUsage, "MAIN", "talk" )
+        info = FreedomPop.getPlanInfo( phoneUsage, planName, "talk" )
         if info is not None:
             total = round( info["totalAllocated"] / 60 )
         return total
         
-    def getUsedMinutes(phoneUsage):
+    def getUsedMinutes(phoneUsage, planName = 'MAIN'):
         used = 0
-        info = FreedomPop._getPlanInfo( phoneUsage, "MAIN", "talk" )
+        info = FreedomPop.getPlanInfo( phoneUsage, planName, "talk" )
         if info is not None:
             used = math.ceil( info["totalUsed"] / 60 )
         return used
@@ -134,7 +134,7 @@ class FreedomPop:
         return used / FreedomPop.MB 
 
     def getEndTime(dataUsage):
-        endTime = datetime.datetime.fromtimestamp(dataUsage["endTime"] / 1000)
+        endTime = datetime.datetime.utcfromtimestamp(dataUsage["endTime"] / 1000)
         return endTime
 
     def getDeltaFromNow(nextTime):
@@ -149,6 +149,9 @@ class FreedomPop:
         except:
             self.logger.warning("Network Error!")
         return None
+
+    def roundDays(dt):
+        return round( dt.days + (dt.seconds / (60*60*24)) )
     
     def printSummary(self):
         accounts = self.getAccountsInfo()
@@ -164,16 +167,27 @@ class FreedomPop:
             phone = self.getPhoneUsage(id)
             data = self.getDataUsage(id)
             if pp is not None:
-                pp.pprint( phone )
+                if phone is not None:
+                    pp.pprint( phone )
                 pp.pprint( data )
             endTime = FreedomPop.getEndTime( data )
-            delta = FreedomPop.getDeltaFromNow( endTime )
-            print( "{}({}): {}/{} minutes {}/{} text messages {}MB/{}MB mobile data, plan {} renew in {} days {} hours ({})".format( 
-                self.username, number,
-                FreedomPop.getUsedMinutes(phone), FreedomPop.getTotalMinutes(phone) , 
-                FreedomPop.getUsedTexts(phone), FreedomPop.getTotalTexts(phone), 
-                round( FreedomPop.getUsedData(data), 2), FreedomPop.getTotalData(data),
-                plan,
-                delta.days, round(delta.seconds / 3600), endTime ) )
+            deltaTime = FreedomPop.getDeltaFromNow( endTime )
+            print( "{}({}): ".format( self.username, number ), end='' )
+            if phone is not None:
+                print( "{}/{} minutes {}/{} text messages ".format(
+                    FreedomPop.getUsedMinutes(phone), FreedomPop.getTotalMinutes(phone),
+                    FreedomPop.getUsedTexts(phone), FreedomPop.getTotalTexts(phone) ), end='' )
+                if FreedomPop.getPlanInfo( phone, 'GLOBAL' ) is not None:
+                    print( "{}/{} intl' minutes, ".format( 
+                        FreedomPop.getUsedMinutes(phone, 'GLOBAL'), FreedomPop.getTotalMinutes(phone, 'GLOBAL')), end='' )
+            if data is not None:
+                print( "{}MB/{}MB mobile data, ".format( 
+                    round( FreedomPop.getUsedData(data), 2), FreedomPop.getTotalData(data)), end='' )
+            if deltaTime.days > 1:
+                print( "plan {} will renew in {} days ({})".format( 
+                    plan, FreedomPop.roundDays(deltaTime), endTime.strftime('%Y-%m-%d') ) )
+            else:
+                print( "plan {} will renew in {} hours ({})".format( 
+                    plan, round(deltaTime.seconds / 3600), endTime.strftime('%Y-%m-%d') ) )
         
 
