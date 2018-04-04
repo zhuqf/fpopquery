@@ -15,14 +15,21 @@ class FreedomPop:
     identity_url = "https://my.freedompop.com/api/identity"
     user_url = "https://my.freedompop.com/api/user/{}/"
     accounts_url = "https://my.freedompop.com/api/user/{}/accounts"
+#    accounts_url = "https://my.freedompop.com/api/user/{}/accounts?expand=deviceProduct&expand=plan&expand=debitAccount"
+#    accounts_url = "https://my.freedompop.com/api/user/{}/accounts?expand=plan"
     usage_url = "https://my.freedompop.com/api/account/{}/usage/{}-activity/current"
+    subscription_url = "https://my.freedompop.com/api/account/{}/subscription/current"
+    intl_url = "https://my.freedompop.com/api/account/{}/product/international/voice-plan/current"
+    credit_url = "https://my.freedompop.com/api/account/{}/credit/balance"
+    plan_url = "https://my.freedompop.com/api/account/{}/product/plan/current"
+    service_url = "https://my.freedompop.com/api/account/{}/product/service/current"
 
     MB = 1024*1024;
 
     def __init__(self, username, password):
         self.username = username
         self.password = password
-        self.out = open("{}.log".format( self.username ), 'wt')
+#        self.out = open("{}.log".format( self.username ), 'wt')
 
     def __exit__(self, exc_type, exc_value, traceback):
         self.session.cookies.clear()
@@ -77,6 +84,20 @@ class FreedomPop:
     def getDataUsage(self, deviceId ):
         return self._getUsage(deviceId, "data")
 
+    def getSubscription(self, deviceId ):
+        return self.getDataFromUrl( FreedomPop.subscription_url.format( deviceId ) )
+
+    def getDueDate(subscription):
+        dueDate = subscription["nextBillingDate"]
+        return datetime.datetime.utcfromtimestamp( dueDate/1000 )
+
+    def getPaymentAmount(subscription):
+        nextBillingAmountTotal = subscription["nextBillingAmountTotal"]
+        return "{}{}".format( nextBillingAmountTotal["symbol"], nextBillingAmountTotal["amount"] )
+
+    def getBillingDaysLeft(subscription):
+        return subscription["billingDaysLeft"]
+
     def getPhoneNumber(device):
         return device["fpopPhone"]
     
@@ -85,6 +106,12 @@ class FreedomPop:
 
     def getPlan(device):
         return device["plan"]
+
+    def getIntlPlanName(self, deviceId ):
+        plan = self.getDataFromUrl( FreedomPop.intl_url.format( deviceId ) )
+        if plan is not None:
+            return plan[0]["name"]
+        return None
 
     def getPlanInfo(phoneUsage, planName, type = None):
         info = None
@@ -159,6 +186,7 @@ class FreedomPop:
         if self.out is not None:
             pp = pprint.PrettyPrinter(stream=self.out)
         if pp is not None:
+            pp.pprint( self.getUserInfo() )
             pp.pprint( accounts )
         for device in accounts:
             number = FreedomPop.getPhoneNumber( device )
@@ -166,28 +194,37 @@ class FreedomPop:
             plan = FreedomPop.getPlan( device )
             phone = self.getPhoneUsage(id)
             data = self.getDataUsage(id)
+            subscription = self.getSubscription(id)
             if pp is not None:
                 if phone is not None:
                     pp.pprint( phone )
                 pp.pprint( data )
             endTime = FreedomPop.getEndTime( data )
             deltaTime = FreedomPop.getDeltaFromNow( endTime )
-            print( "{}({}): ".format( self.username, number ), end='' )
+            print( "{}({}):\t".format( self.username, number ), end='' )
             if phone is not None:
-                print( "{}/{} minutes {}/{} text messages ".format(
+                print( "{}\t{}/{} minutes\t{}/{} text messages\t ".format(
+                    plan,
                     FreedomPop.getUsedMinutes(phone), FreedomPop.getTotalMinutes(phone),
                     FreedomPop.getUsedTexts(phone), FreedomPop.getTotalTexts(phone) ), end='' )
                 if FreedomPop.getPlanInfo( phone, 'GLOBAL' ) is not None:
-                    print( "{}/{} intl' minutes, ".format( 
+                    print( "{}/{} intl' minutes,\t".format( 
                         FreedomPop.getUsedMinutes(phone, 'GLOBAL'), FreedomPop.getTotalMinutes(phone, 'GLOBAL')), end='' )
             if data is not None:
-                print( "{}MB/{}MB mobile data, ".format( 
+                print( "{}MB/{}MB mobile data,\t".format( 
                     round( FreedomPop.getUsedData(data), 2), FreedomPop.getTotalData(data)), end='' )
-            if deltaTime.days > 1:
-                print( "plan {} will renew in {} days ({})".format( 
-                    plan, FreedomPop.roundDays(deltaTime), endTime.strftime('%Y-%m-%d') ) )
-            else:
-                print( "plan {} will renew in {} hours ({})".format( 
-                    plan, round(deltaTime.seconds / 3600), endTime.strftime('%Y-%m-%d') ) )
-        
+            if subscription is not None:
+                print( "next bill due date {} amount {} {} left".format(
+                    FreedomPop.getDueDate(subscription).strftime('%Y-%m-%d'),
+                    FreedomPop.getPaymentAmount(subscription),
+                    FreedomPop.getBillingDaysLeft(subscription)), end='' )
+            print( "" )
+#            if deltaTime.days > 1:
+#                print( "{} renew in {} days ({})".format(
+#                    plan,
+#                    FreedomPop.roundDays(deltaTime), endTime.strftime('%Y-%m-%d') ), end='' )
+#            else:
+#                print( "plan {} will renew in {} hours ({})".format(
+#                    plan, round(deltaTime.seconds / 3600), endTime.strftime('%Y-%m-%d') ), end='' )
+#            print( " Billing Remaining {} days".format( device["trackingParams"]["BillingDaysRemaining"] ) )
 
