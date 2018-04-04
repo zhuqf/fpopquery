@@ -93,7 +93,7 @@ class FreedomPop:
 
     def getPaymentAmount(subscription):
         nextBillingAmountTotal = subscription["nextBillingAmountTotal"]
-        return "{}{}".format( nextBillingAmountTotal["symbol"], nextBillingAmountTotal["amount"] )
+        return "{}{:.2f}".format( nextBillingAmountTotal["symbol"], nextBillingAmountTotal["amount"] )
 
     def getBillingDaysLeft(subscription):
         return subscription["billingDaysLeft"]
@@ -203,15 +203,15 @@ class FreedomPop:
             deltaTime = FreedomPop.getDeltaFromNow( endTime )
             print( "{}({}):\t".format( self.username, number ), end='' )
             if phone is not None:
-                print( "{}\t{}/{} minutes\t{}/{} text messages\t ".format(
+                print( "{}\t{:3d}/{} minutes{:3d}/{} text messages, ".format(
                     plan,
                     FreedomPop.getUsedMinutes(phone), FreedomPop.getTotalMinutes(phone),
                     FreedomPop.getUsedTexts(phone), FreedomPop.getTotalTexts(phone) ), end='' )
                 if FreedomPop.getPlanInfo( phone, 'GLOBAL' ) is not None:
-                    print( "{}/{} intl' minutes,\t".format( 
+                    print( "{:2d}/{} intl' minutes, ".format(
                         FreedomPop.getUsedMinutes(phone, 'GLOBAL'), FreedomPop.getTotalMinutes(phone, 'GLOBAL')), end='' )
             if data is not None:
-                print( "{}MB/{}MB mobile data,\t".format( 
+                print( "{:6.2f}MB/{}MB mobile data, ".format(
                     round( FreedomPop.getUsedData(data), 2), FreedomPop.getTotalData(data)), end='' )
             if subscription is not None:
                 print( "next bill due date {} amount {} {} left".format(
