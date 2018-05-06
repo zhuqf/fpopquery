@@ -1,5 +1,9 @@
 import requests, urllib, json, logging, sys, base64, datetime, math
 import pprint
+from colorCode import colors 
+
+def printNoEnd( str ):
+        print( str, end='' ) 
 
 class FreedomPop:
     session = requests.Session() 
@@ -23,19 +27,28 @@ class FreedomPop:
     credit_url = "https://my.freedompop.com/api/account/{}/credit/balance"
     plan_url = "https://my.freedompop.com/api/account/{}/product/plan/current"
     service_url = "https://my.freedompop.com/api/account/{}/product/service/current"
+    port_out_url = "https://my.freedompop.com/api/account/{}/phone/port-out-order"
+    credit_balance_url = "https://my.freedompop.com/api/account/{}/credit/balance"
+    credit_history_url = "https://my.freedompop.com/api/account/{}/credit?page=0&pageSize=2"
 
     MB = 1024*1024;
+
+    resetColor = colors.reset
+    warningColor = colors.fg.lightblue
+    limitColor = colors.fg.lightred
 
     def __init__(self, username, password):
         self.username = username
         self.password = password
-#        self.out = open("{}.log".format( self.username ), 'wt')
 
     def __exit__(self, exc_type, exc_value, traceback):
         self.session.cookies.clear()
         if self.out is not None:
             self.out.close()
 
+    def enableLog(self):
+        self.out = open("{}.log".format( self.username ), 'wt')
+        
     def _identityLogin(self):
         try:
             resp = self.session.post( FreedomPop.identity_url, json={"username": self.username, "password": self.password})
@@ -87,6 +100,12 @@ class FreedomPop:
     def getSubscription(self, deviceId ):
         return self.getDataFromUrl( FreedomPop.subscription_url.format( deviceId ) )
 
+    def getCreditBalance(self, deviceId ):
+        return self.getDataFromUrl( FreedomPop.credit_balance_url.format( deviceId ) )
+
+    def getCreditHistory(self, deviceId ):
+        return self.getDataFromUrl( FreedomPop.credit_history_url.format( deviceId ) )
+
     def getDueDate(subscription):
         dueDate = subscription["nextBillingDate"]
         return datetime.datetime.utcfromtimestamp( dueDate/1000 )
@@ -97,6 +116,9 @@ class FreedomPop:
 
     def getBillingDaysLeft(subscription):
         return subscription["billingDaysLeft"]
+
+    def getTopUpCreditBalance(credit):
+        return credit["current"]["balance"]["amount"]
 
     def getPhoneNumber(device):
         return device["fpopPhone"]
@@ -179,10 +201,56 @@ class FreedomPop:
 
     def roundDays(dt):
         return round( dt.days + (dt.seconds / (60*60*24)) )
-    
-    def printSummary(self):
+  
+    def printPhoneUsage(self, phone):
+        printNoEnd( "{:3d}/{}".format( FreedomPop.getUsedMinutes(phone), FreedomPop.getTotalMinutes(phone) ) )
+        printNoEnd( " minutes " )
+        printNoEnd( "{:3d}/{}".format( FreedomPop.getUsedTexts(phone), FreedomPop.getTotalTexts(phone) ) )
+        printNoEnd( " text messages, " )
+
+    def printGlobalUsage(self, phone):
+        printNoEnd( "{:2d}/{}".format(
+            FreedomPop.getUsedMinutes(phone, 'GLOBAL'), FreedomPop.getTotalMinutes(phone, 'GLOBAL')))
+        printNoEnd( " intl' minutes, " )
+
+    def highlightCheck(self, used, total, limit, colorCode):
+        if limit is not None:
+            if limit < 1:
+                percentage = used / total
+                if percentage > limit:
+                    printNoEnd( colorCode )
+                    return True
+            elif limit > 1 and used > limit:
+                printNoEnd( colorCode )
+                return True
+        return False
+
+    def printDataUsage(self, data, warning, limit):
+        used = FreedomPop.getUsedData(data)
+        total = FreedomPop.getTotalData(data)
+        percentage = used / total
+        colored = self.highlightCheck( used, total, limit, self.limitColor )
+        if colored is not True:
+            colored = self.highlightCheck( used, total, warning, self.warningColor )
+        printNoEnd( "{:6.2f}MB/{}MB".format(used, total) )
+        if colored is not False:
+            printNoEnd( self.resetColor );
+        printNoEnd( " mobile data, " )
+
+    def printBilling(self, subscription):
+        #printNoEnd( "next bill ")
+        printNoEnd( "due date {} amount {} {} left ".format(
+            FreedomPop.getDueDate(subscription).strftime('%Y-%m-%d'),
+            FreedomPop.getPaymentAmount(subscription),
+            FreedomPop.getBillingDaysLeft(subscription)) )
+
+    def printTopUpCreditBalance(self, credit):
+        printNoEnd( "top-up credit {}".format( FreedomPop.getTopUpCreditBalance(credit) ) )
+        
+    def printSummary(self, warning, limit):
         accounts = self.getAccountsInfo()
         pp = None
+
         if self.out is not None:
             pp = pprint.PrettyPrinter(stream=self.out)
         if pp is not None:
@@ -199,32 +267,34 @@ class FreedomPop:
                 if phone is not None:
                     pp.pprint( phone )
                 pp.pprint( data )
-            endTime = FreedomPop.getEndTime( data )
-            deltaTime = FreedomPop.getDeltaFromNow( endTime )
-            print( "{}({}):\t".format( self.username, number ), end='' )
+            printNoEnd( "{}({}):\t{}\t".format( self.username, number, plan ) )
             if phone is not None:
-                print( "{}\t{:3d}/{} minutes{:3d}/{} text messages, ".format(
-                    plan,
-                    FreedomPop.getUsedMinutes(phone), FreedomPop.getTotalMinutes(phone),
-                    FreedomPop.getUsedTexts(phone), FreedomPop.getTotalTexts(phone) ), end='' )
+                self.printPhoneUsage(phone)
                 if FreedomPop.getPlanInfo( phone, 'GLOBAL' ) is not None:
-                    print( "{:2d}/{} intl' minutes, ".format(
-                        FreedomPop.getUsedMinutes(phone, 'GLOBAL'), FreedomPop.getTotalMinutes(phone, 'GLOBAL')), end='' )
+                    self.printGlobalUsage(phone)
+
             if data is not None:
-                print( "{:6.2f}MB/{}MB mobile data, ".format(
-                    round( FreedomPop.getUsedData(data), 2), FreedomPop.getTotalData(data)), end='' )
+                self.printDataUsage(data, warning, limit)
+
             if subscription is not None:
-                print( "next bill due date {} amount {} {} left".format(
-                    FreedomPop.getDueDate(subscription).strftime('%Y-%m-%d'),
-                    FreedomPop.getPaymentAmount(subscription),
-                    FreedomPop.getBillingDaysLeft(subscription)), end='' )
+                self.printBilling(subscription)
+
+#            credit = self.getCreditBalance(id)
+#            if credit is not None:
+#                if FreedomPop.getTopUpCreditBalance(credit) > 0:
+#                    self.printTopUpCreditBalance(credit)
+                
+
             print( "" )
+
+#            endTime = FreedomPop.getEndTime( data )
+#            deltaTime = FreedomPop.getDeltaFromNow( endTime )
 #            if deltaTime.days > 1:
-#                print( "{} renew in {} days ({})".format(
+#                printNoEnd( "{} renew in {} days ({})".format(
 #                    plan,
-#                    FreedomPop.roundDays(deltaTime), endTime.strftime('%Y-%m-%d') ), end='' )
+#                    FreedomPop.roundDays(deltaTime), endTime.strftime('%Y-%m-%d') ) )
 #            else:
-#                print( "plan {} will renew in {} hours ({})".format(
-#                    plan, round(deltaTime.seconds / 3600), endTime.strftime('%Y-%m-%d') ), end='' )
+#                printNoEnd( "plan {} will renew in {} hours ({})".format(
+#                    plan, round(deltaTime.seconds / 3600), endTime.strftime('%Y-%m-%d') ) )
 #            print( " Billing Remaining {} days".format( device["trackingParams"]["BillingDaysRemaining"] ) )
 

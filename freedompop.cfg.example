@@ -1,3 +1,7 @@
 [FreedomPop]
 email1@domain.com = password
 email2@domain.com = password
+[Configure]
+warning = 0.5
+limit = 0.7
+log = disable

@@ -15,5 +15,8 @@ mail2@domain.com(1xxxxxxxxxx)):	plan-free-ww	  0/200 minutes  0/500 text message
 
 ```
 
+##Feature update
+Add warning and limit in Configure, when data usage is above warning, the report will show usage in blue, when over limit it will show in read. warning and limit can be percentage from 0 to 1 or integer large than 1 as MB.
+
 ## License
 Licensed under the MIT license.
