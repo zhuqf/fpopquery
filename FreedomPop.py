@@ -114,11 +114,15 @@ class FreedomPop:
         nextBillingAmountTotal = subscription["nextBillingAmountTotal"]
         return "{}{:.2f}".format( nextBillingAmountTotal["symbol"], nextBillingAmountTotal["amount"] )
 
+    def getSubscriptionCredit(subscription):
+        subscriptionCredit = subscription["subscriptionCredit"]
+        return "{}{:.2f}".format( subscriptionCredit["symbol"], subscriptionCredit["amount"] )
+
     def getBillingDaysLeft(subscription):
         return subscription["billingDaysLeft"]
 
     def getTopUpCreditBalance(credit):
-        return credit["current"]["balance"]["amount"]
+        return credit["current"]["balance"]
 
     def getPhoneNumber(device):
         return device["fpopPhone"]
@@ -238,14 +242,24 @@ class FreedomPop:
         printNoEnd( " mobile data, " )
 
     def printBilling(self, subscription):
-        #printNoEnd( "next bill ")
+        printNoEnd( "next bill ")
         printNoEnd( "due date {} amount {} {} left ".format(
             FreedomPop.getDueDate(subscription).strftime('%Y-%m-%d'),
             FreedomPop.getPaymentAmount(subscription),
             FreedomPop.getBillingDaysLeft(subscription)) )
 
     def printTopUpCreditBalance(self, credit):
-        printNoEnd( "top-up credit {}".format( FreedomPop.getTopUpCreditBalance(credit) ) )
+        balance = FreedomPop.getTopUpCreditBalance(credit)
+        printNoEnd( "top-up credit {}{} ".format( balance['symbol'], balance['amount'] ) )
+
+    def printSubscriptionCredit(self, subscription ):
+        printNoEnd( "subscription credit {}".format( FreedomPop.getSubscriptionCredit(subscription) ) )
+
+    def printNewLineLeading( newLine ):
+        if newLine is True:
+            print('')
+            printNoEnd( '\t\t\t\t' )
+        return False
         
     def printSummary(self, warning, limit):
         accounts = self.getAccountsInfo()
@@ -263,6 +277,7 @@ class FreedomPop:
             phone = self.getPhoneUsage(id)
             data = self.getDataUsage(id)
             subscription = self.getSubscription(id)
+            newLine = True
             if pp is not None:
                 if phone is not None:
                     pp.pprint( phone )
@@ -279,11 +294,16 @@ class FreedomPop:
             if subscription is not None:
                 self.printBilling(subscription)
 
-#            credit = self.getCreditBalance(id)
-#            if credit is not None:
-#                if FreedomPop.getTopUpCreditBalance(credit) > 0:
-#                    self.printTopUpCreditBalance(credit)
-                
+            credit = self.getCreditBalance(id)
+            if credit is not None:
+                balance = FreedomPop.getTopUpCreditBalance(credit)
+                if balance['amount'] > 0:
+                    newLine = FreedomPop.printNewLineLeading( newLine )
+                    self.printTopUpCreditBalance(credit)
+            if subscription["subscriptionCredit"]["amount"] > 0:
+                newLine = FreedomPop.printNewLineLeading( newLine )
+                self.printSubscriptionCredit( subscription )
+
 
             print( "" )
 
