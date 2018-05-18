@@ -30,6 +30,7 @@ class FreedomPop:
     port_out_url = "https://my.freedompop.com/api/account/{}/phone/port-out-order"
     credit_balance_url = "https://my.freedompop.com/api/account/{}/credit/balance"
     credit_history_url = "https://my.freedompop.com/api/account/{}/credit?page=0&pageSize=2"
+    credit_active_url = "https://my.freedompop.com/api/account/{}/credit"
 
     MB = 1024*1024;
 
@@ -100,11 +101,31 @@ class FreedomPop:
     def getSubscription(self, deviceId ):
         return self.getDataFromUrl( FreedomPop.subscription_url.format( deviceId ) )
 
+    def activeCredit(self, deviceId ):
+        try:
+            credit_active_url = FreedomPop.credit_active_url.format(deviceId)
+            resp = self.session.post( credit_active_url, json={"accountId": None} );
+            if resp.status_code == 200:
+                self.logger.debug("credit active: %s", resp.json()["message"])
+                return resp.json()["message"]
+            else:
+                self.logger.warning("Account %s can not active the credit!", self.username)
+        except:
+            self.logger.warning("Network Error!")
+        return None
+
     def getCreditBalance(self, deviceId ):
         return self.getDataFromUrl( FreedomPop.credit_balance_url.format( deviceId ) )
 
     def getCreditHistory(self, deviceId ):
         return self.getDataFromUrl( FreedomPop.credit_history_url.format( deviceId ) )
+
+    def isCreditExpired(self, creditHistory ):
+        if creditHistory["content"]:
+            self.logger.debug( creditHistory["content"][0]["type"] )
+            if creditHistory["content"][0]["type"] == "EXPIRED":
+                return True
+        return False
 
     def getDueDate(subscription):
         dueDate = subscription["nextBillingDate"]
@@ -293,6 +314,15 @@ class FreedomPop:
 
             if subscription is not None:
                 self.printBilling(subscription)
+
+
+            creditHistory = self.getCreditHistory(id)
+            if creditHistory is not None:
+                if self.isCreditExpired(creditHistory) is True:
+                    msg = self.activeCredit(id)
+                    if msg is not None:
+                        newLine = FreedomPop.printNewLineLeading( newLine )
+                        printNoEnd( "{}. ".format( msg ) )
 
             credit = self.getCreditBalance(id)
             if credit is not None:
