@@ -11,7 +11,7 @@ class FreedomPop:
     logger = logging.getLogger('FreedomPop')
     #handler = logging.StreamHandler()
     #logger.addHandler(handler)
-    #logger.setLevel(logging.DEBUG)
+    logger.setLevel(logging.DEBUG)
 
     user_token = None
     out = None
@@ -31,12 +31,15 @@ class FreedomPop:
     credit_balance_url = "https://my.freedompop.com/api/account/{}/credit/balance"
     credit_history_url = "https://my.freedompop.com/api/account/{}/credit?page=0&pageSize=2"
     credit_active_url = "https://my.freedompop.com/api/account/{}/credit"
+    account_reactivate_url = "https://my.freedompop.com/api/account/{}/reactivate"
 
     MB = 1024*1024;
 
     resetColor = colors.reset
     warningColor = colors.fg.lightblue
     limitColor = colors.fg.lightred
+    inactiveColor = colors.fg.orange
+    dormantColor = colors.fg.red
 
     def __init__(self, username, password):
         self.username = username
@@ -114,6 +117,19 @@ class FreedomPop:
             self.logger.warning("Network Error!")
         return None
 
+    def accountReactivate(self, deviceId ):
+        try:
+            account_reactivate_url = FreedomPop.account_reactivate_url.format(deviceId)
+            resp = self.session.post( account_reactivate_url, json={} );
+            if resp.status_code == 200:
+                self.logger.debug("account reactivate: %s", resp.json()["message"])
+                return resp.json()["message"]
+            else:
+                self.logger.warning("Account %s can not be reactivated!", self.username)
+        except:
+            self.logger.warning("Network Error!")
+        return None
+
     def getCreditBalance(self, deviceId ):
         return self.getDataFromUrl( FreedomPop.credit_balance_url.format( deviceId ) )
 
@@ -147,6 +163,9 @@ class FreedomPop:
 
     def getPhoneNumber(device):
         return device["fpopPhone"]
+    
+    def getProperty(device, property):
+        return device["properties"][property]
     
     def getDeviceId(device):
         return device["externalId"]
@@ -191,13 +210,17 @@ class FreedomPop:
         if info is not None:
             total = round( info["totalAllocated"] / 60 )
         return total
-        
-    def getUsedMinutes(phoneUsage, planName = 'MAIN'):
+    
+    def getUsedSeconds(phoneUsage, planName = 'MAIN'):    
         used = 0
         info = FreedomPop.getPlanInfo( phoneUsage, planName, "talk" )
         if info is not None:
-            used = math.ceil( info["totalUsed"] / 60 )
+            used = info["totalUsed"]
         return used
+
+    def getUsedMinutes(phoneUsage, planName = 'MAIN'):
+        used = FreedomPop.getUsedSeconds( phoneUsage, planName)
+        return math.ceil( used / 60 );
         
     def getTotalData(dataUsage):
         total = dataUsage["totalAllocated"]
@@ -295,26 +318,49 @@ class FreedomPop:
             number = FreedomPop.getPhoneNumber( device )
             id = FreedomPop.getDeviceId( device )
             plan = FreedomPop.getPlan( device )
+            dormant = FreedomPop.getProperty(device, "DORMANT")
+
             phone = self.getPhoneUsage(id)
             data = self.getDataUsage(id)
             subscription = self.getSubscription(id)
             newLine = True
+            isActive = False
             if pp is not None:
                 if phone is not None:
                     pp.pprint( phone )
                 pp.pprint( data )
             printNoEnd( "{}({}):\t{}\t".format( self.username, number, plan ) )
             if phone is not None:
+                totalUsedSeconds = FreedomPop.getUsedSeconds( phone )
                 self.printPhoneUsage(phone)
                 if FreedomPop.getPlanInfo( phone, 'GLOBAL' ) is not None:
+                    totalUsedSeconds += FreedomPop.getUsedSeconds( phone, 'GLOBAL' )
                     self.printGlobalUsage(phone)
+                if totalUsedSeconds >= 300:
+                    isActive = True
 
             if data is not None:
                 self.printDataUsage(data, warning, limit)
+                if FreedomPop.getUsedData(data) >= 5:
+                    isActive = True
+
+            if isActive is not True:
+                printNoEnd( self.inactiveColor )
+
+            if dormant is not False:
+                printNoEnd( self.dormantColor )
 
             if subscription is not None:
                 self.printBilling(subscription)
 
+            if isActive is not True:
+                printNoEnd( self.resetColor )
+            
+            if dormant is not False:
+                msg = self.accountReactivate(id)
+                if msg is not None:
+                    newLine = FreedomPop.printNewLineLeading( newLine )
+                    printNoEnd( "{}. ".format( msg ) )
 
             creditHistory = self.getCreditHistory(id)
             if creditHistory is not None:
@@ -336,6 +382,7 @@ class FreedomPop:
 
 
             print( "" )
+            sys.stdout.flush()
 
 #            endTime = FreedomPop.getEndTime( data )
 #            deltaTime = FreedomPop.getDeltaFromNow( endTime )
